@@ -1,31 +1,23 @@
 import os
 import asyncio
-from pyrogram import Client, filters
+import re  # Ye naya tool hai jo "Ep + Number" dhundega
+from pyrogram import Client, filters, idle
 
 print("Bot start hone ki koshish kar raha hai...")
 
 # --- RAILWAY VARIABLES CHECKER ---
-# Ye check karega ki aapne Railway variables sahi se daale hain ya nahi
 API_ID_STR = os.environ.get("API_ID", "").strip()
 API_HASH = os.environ.get("API_HASH", "").strip()
 SESSION_STRING = os.environ.get("SESSION_STRING", "").strip()
 
-# Agar koi variable missing hai toh bot saaf error dega aur band ho jayega
-if not API_ID_STR:
-    print("❌ ERROR: Railway Variables mein 'API_ID' missing hai!")
-    exit()
-if not API_HASH:
-    print("❌ ERROR: Railway Variables mein 'API_HASH' missing hai!")
-    exit()
-if not SESSION_STRING:
-    print("❌ ERROR: Railway Variables mein 'SESSION_STRING' missing hai!")
+if not API_ID_STR or not API_HASH or not SESSION_STRING:
+    print("❌ ERROR: Railway Variables missing hain!")
     exit()
 
-# API ID ko number (integer) mein convert karna zaroori hai
 try:
     API_ID = int(API_ID_STR)
 except ValueError:
-    print("❌ ERROR: 'API_ID' mein sirf numbers hone chahiye! ABCD mat daalo.")
+    print("❌ ERROR: 'API_ID' mein sirf numbers hone chahiye!")
     exit()
 
 # --- CHANNEL CONFIGURATION ---
@@ -35,14 +27,12 @@ SOURCE_CHANNELS = [
 ]
 
 TARGET_CHANNELS = [
-    -1002969272951,
-    "https://t.me/+NFPWCmf1b903Nzc1"  # Yahan Private Invite Link ya Username daalo
+    -1002969272951,  # Target 1
+    -1003735167884   # Target 2 (Agar ye abhi bhi fail ho raha hai, toh yahan Link daal dena)
 ]
 
-
+# Basic Keywords (Inme se koi 2 hone chahiye)
 REQUIRED_KEYWORDS = ["taarak", "mehta", "ooltah", "chashmah"]
-
-print("✅ Variables mil gaye! Telegram se connect kar rahe hain...")
 
 # Client Setup
 app = Client("tmkoc_bot", api_id=API_ID, api_hash=API_HASH, session_string=SESSION_STRING)
@@ -53,15 +43,27 @@ async def auto_forward(client, message):
     caption = message.caption if message.caption else ""
     file_name = message.video.file_name if message.video.file_name else ""
     
+    # Text ko lowercase karte hain check karne ke liye
     search_text = (caption + " " + file_name).lower()
     
-    matches = 0
+    # STEP 1: Check Keywords ("Taarak" aur "Mehta" hai ya nahi?)
+    keyword_matches = 0
     for word in REQUIRED_KEYWORDS:
         if word in search_text:
-            matches += 1
+            keyword_matches += 1
             
-    if matches >= 2:
-        print(f"✅ Video Found: {file_name[:20]}... Forwarding now!")
+    # STEP 2: Check Episode Number (Ep4631, Episode 123, Ep. 450 etc.)
+    # Ye pattern dhundega: "ep" ya "episode" ke baad koi number
+    ep_match = re.search(r"(?:ep|episode)[\s\.]*?(\d+)", search_text)
+    
+    # FINAL DECISION:
+    # Keywords bhi match hone chahiye (>=2) AUR Episode number bhi milna chahiye
+    if keyword_matches >= 2 and ep_match:
+        
+        episode_num = ep_match.group(1) # Episode number nikal liya
+        print(f"✅ FOUND: Taarak Mehta Episode {episode_num} detected!")
+        print(f"File: {file_name}")
+        
         for target_id in TARGET_CHANNELS:
             try:
                 await message.copy(chat_id=target_id)
@@ -69,8 +71,29 @@ async def auto_forward(client, message):
                 await asyncio.sleep(2)
             except Exception as e:
                 print(f"❌ Error sending to {target_id}: {e}")
+                
     else:
-        print(f"⚠️ Ignored: Ye TMKOC ki video nahi hai. ({file_name[:20]}...)")
+        # Agar Keywords mile par Episode number nahi mila, toh ignore
+        if keyword_matches >= 2 and not ep_match:
+            print(f"⚠️ Ignored: 'Taarak Mehta' mila par 'Ep Number' nahi mila. (File: {file_name})")
+        else:
+            # Agar kuch bhi match nahi hua
+            pass
+
+# --- SMART STARTUP ---
+async def main():
+    print("🔄 Telegram servers se connect kar rahe hain...")
+    await app.start()
+    print("==================================================")
+    print("✅ BOT READY: Sirf 'Ep + Number' wali files forward hongi!")
+    print("==================================================")
+    await idle()
+    await app.stop()
 
 if __name__ == "__main__":
-    app.run()
+    app.run(main())
+
+
+
+
+ 
