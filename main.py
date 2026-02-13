@@ -35,9 +35,10 @@ SOURCE_CHANNELS = [
 ]
 
 TARGET_CHANNELS = [
-    -1002969272951,  # Target 1
-    -1003735167884   # Target 2
+    -1002969272951,
+    "https://t.me/+NFPWCmf1b903Nzc1"  # Yahan Private Invite Link ya Username daalo
 ]
+
 
 REQUIRED_KEYWORDS = ["taarak", "mehta", "ooltah", "chashmah"]
 
