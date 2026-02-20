@@ -3,95 +3,79 @@ import asyncio
 import re
 from pyrogram import Client, filters, idle
 
-print("TMKOC FINAL BOT starting...")
-
-# ---------- ENV (Railway Safe) ----------
+# ---------- ENV ----------
 API_ID = int(os.environ["API_ID"])
 API_HASH = os.environ["API_HASH"]
 SESSION_STRING = os.environ["SESSION_STRING"]
 
 # ---------- CHANNELS ----------
-SOURCE_CHANNELS = [
-    -1002983885867,   # Main source
-    -1003592065071    # Testing source
-]
+# Private channel ID sahi hai, bas ensure karein ki aapka account usme Joined hai.
+SOURCE_CHANNELS = [-1002983885867, -1003592065071]
+TARGET_CHANNELS = [-1002969272951, -1003735167884]
 
-TARGET_CHANNELS = [
-    -1002969272951,
-    -1003735167884
-]
+# ---------- CONFIG ----------
+PROMO_TEXT = "\n\n**USE THIS BOT TMKOC EPISODE:- @AutoMovie_Filter_Bot**"
 
-# ---------- CLIENT ----------
+# User Session Client
 app = Client(
-    "tmkoc_bot_final",
-    api_id=API_ID,
-    api_hash=API_HASH,
+    "tmkoc_user_bot", 
+    api_id=API_ID, 
+    api_hash=API_HASH, 
     session_string=SESSION_STRING
 )
 
-# ---------- REGEX ----------
-EP_REGEX = re.compile(r"(?:ep|episode)[\s\.\-_]*?(\d+)", re.IGNORECASE)
-
-# ---------- CLEANER ----------
-def remove_backup_links(text: str) -> str:
-    if not text:
+def clean_caption(caption: str) -> str:
+    if not caption:
         return ""
-    text = re.sub(r"https?://t\.me/\S+", "", text)
+    # Links aur @usernames hatane ke liye
+    text = re.sub(r"https?://t\.me/\S+", "", caption)
     text = re.sub(r"t\.me/\S+", "", text)
-    text = re.sub(r"backup\s*channel\s*[-:]*", "", text, flags=re.I)
+    text = re.sub(r"@\S+", "", text)
     return text.strip()
 
-# ---------- HANDLER ----------
+# filters.video ensure karta hai ki sirf video forward ho, text nahi
 @app.on_message(filters.chat(SOURCE_CHANNELS) & filters.video)
 async def auto_forward(client, message):
+    try:
+        caption = message.caption or ""
+        file_name = (message.video.file_name if message.video else "") or ""
+        
+        # 1. TMKOC Detection Logic
+        search_text = f"{caption} {file_name}".lower()
+        keywords = ["taarak", "mehta", "tmkoc", "ooltah", "chashmah"]
+        
+        if not any(word in search_text for word in keywords):
+            return # Agar TMKOC ka video nahi hai toh skip
 
-    caption = message.caption or ""
-    filename = message.video.file_name or ""
+        # 2. Caption Cleaning
+        cleaned_text = clean_caption(caption)
+        
+        # 3. Fallback: Agar caption khali hai toh file_name use karein
+        if not cleaned_text:
+            cleaned_text = file_name if file_name else "Taarak Mehta Ka Ooltah Chashmah"
 
-    combined_text = f"{caption} {filename}".lower()
+        # 4. Final Formatting with Bold Promo
+        final_caption = f"{cleaned_text}{PROMO_TEXT}"
 
-    # Must contain TMKOC identity
-    if not ("taarak" in combined_text and "mehta" in combined_text):
-        return
+        print(f"✅ TMKOC Video Mil Gaya: {file_name}")
 
-    ep_match = EP_REGEX.search(combined_text)
-    if not ep_match:
-        return
-
-    episode_number = ep_match.group(1)
-
-    # FINAL CLEAN CAPTION (ALWAYS SAME FORMAT)
-    final_caption = (
-        "Taarak Mehta Ka Ooltah Chashmah\n"
-        f"Episode {episode_number}"
-    )
-
-    print(f"✅ Forwarding Episode {episode_number}")
-
-    for target in TARGET_CHANNELS:
-        try:
-            await message.copy(
-                chat_id=target,
-                caption=final_caption
-            )
-            await asyncio.sleep(2)  # flood safety
-        except Exception as e:
-            print(f"❌ Error sending to {target}: {e}")
-
-# ---------- START ----------
-async def main():
-    await app.start()
-    print("================================================")
-    print("✅ TMKOC FINAL BOT READY (NO CRASH MODE)")
-    print("================================================")
-    await idle()
-    await app.stop()
+        for target in TARGET_CHANNELS:
+            try:
+                # Copy use karne se original caption hat kar naya caption lag jayega
+                await message.copy(
+                    chat_id=target,
+                    caption=final_caption
+                )
+                await asyncio.sleep(2) # Flood safety
+            except Exception as e:
+                print(f"❌ Target {target} par bhejne mein error: {e}")
+                
+    except Exception as e:
+        print(f"❌ Error in handler: {e}")
 
 if __name__ == "__main__":
-    app.run(main())
-
-
-
-
-
- 
+    print("==========================================")
+    print("TMKOC USER-BOT STARTED (SESSION STRING)")
+    print("==========================================")
+    app.run()
+    
