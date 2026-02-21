@@ -2,87 +2,84 @@ import os
 import asyncio
 import re
 from pyrogram import Client, filters, idle
-from pyrogram.errors import PeerIdInvalid, FloodWait
+from pyrogram.errors import FloodWait
 
 # ----------------- [ CONFIG ] -----------------
 API_ID = int(os.environ["API_ID"])
 API_HASH = os.environ["API_HASH"]
 SESSION_STRING = os.environ["SESSION_STRING"]
 
-SOURCE_CHANNELS = [-1002983885867, -1003592065071]
-TARGET_CHANNELS = [-1002969272951, -1003735167884]
+# SOURCES
+SOURCE_IDS = {-1003592065071}              # Testing
+SOURCE_USERNAMES = {"tmkocepisodedaily1"}  # Public episode channel
+
+# TARGETS
+TARGET_CHANNELS = [
+    "@tmkocdirect",        # Main public channel
+    -1003735167884         # Database channel
+]
 
 PROMO_TEXT = "\n\n**USE THIS BOT TMKOC EPISODE:- @AutoMovie_Filter_Bot**"
 
-# ----------------- [ CLEANER LOGIC ] -----------------
+# ----------------- [ CLEANER ] -----------------
 def clean_text(text: str) -> str:
-    if not text: return ""
-    
-    # 1. Sabse pehle saare links udao (http aur t.me/...)
+    if not text:
+        return ""
+
     text = re.sub(r"https?://\S+", "", text)
     text = re.sub(r"t\.me/\S+", "", text)
-    
-    # 2. Backup channel, Join us, Link jaise words udao (Case insensitive)
-    # Ye un lines ko uda dega jisme backup channel likha ho
-    bad_words = ["backup channel", "backup", "join", "link", "channel link", "subscribe"]
+
+    bad_words = ["backup", "join", "link", "subscribe"]
     for word in bad_words:
-        # Line by line check karke uda dega
         text = re.compile(re.escape(word) + r".*", re.IGNORECASE).sub("", text)
 
-    # 3. Usernames (@bot, @channel) udao
     text = re.sub(r"@\S+", "", text)
-    
-    # 4. Faltu symbols aur extra spaces udao
-    text = re.sub(r"[:\-👉➡📌✅]+", "", text) # Ye symbols jo aksar link ke aage hote hain
-    
-    # 5. Multiple empty lines ko single line mein badlo
     text = re.sub(r"\n\s*\n", "\n", text)
-    
+
     return text.strip()
 
-# ----------------- [ SETUP ] -----------------
+# ----------------- [ APP ] -----------------
 app = Client("TMKOC_Fix_Bot", API_ID, API_HASH, session_string=SESSION_STRING)
 
 @app.on_message(filters.video)
-async def main_handler(client, message):
-    if message.chat.id not in SOURCE_CHANNELS:
+async def handler(client, message):
+    chat = message.chat
+
+    # ✅ 100% reliable source detection
+    if chat.id not in SOURCE_IDS and (
+        not chat.username or chat.username.lower() not in SOURCE_USERNAMES
+    ):
         return
 
     try:
         cap = message.caption or ""
         fname = message.video.file_name or ""
         combined = f"{cap} {fname}".lower()
-        
-        # Detection
+
+        # TMKOC detection
         if not any(x in combined for x in ["taarak", "mehta", "tmkoc", "ooltah"]):
             return
 
-        # Yahan cleaning ho rahi hai
-        cleaned_body = clean_text(cap)
-        
-        # Agar cleaning ke baad kuch na bache, toh filename use karo
-        final_body = cleaned_body if cleaned_body else fname
-        
-        # Aapka Bold Promo
-        final_cap = f"{final_body}{PROMO_TEXT}"
+        body = clean_text(cap)
+        final_text = body if body else fname
+        final_caption = f"{final_text}{PROMO_TEXT}"
 
-        print(f"✅ Cleaned & Forwarding: {fname[:20]}...")
+        print(f"🚀 Forwarding: {fname[:30]}")
 
         for target in TARGET_CHANNELS:
             try:
-                await message.copy(chat_id=target, caption=final_cap)
-                await asyncio.sleep(2)
-            except Exception as e:
-                print(f"❌ Error in {target}: {e}")
+                await message.copy(chat_id=target, caption=final_caption)
+                await asyncio.sleep(10)  # SAFE delay
+            except FloodWait as e:
+                await asyncio.sleep(e.value)
 
     except Exception as e:
-        print(f"⚠️ Handler Error: {e}")
+        print(f"❌ Error: {e}")
 
-async def start_bot():
+async def start():
     await app.start()
-    print("🚀 BOT STARTED & CLEANER ACTIVE!")
+    print("✅ BOT STARTED — FULLY STABLE MODE")
     await idle()
 
 if __name__ == "__main__":
-    app.run(start_bot())
-    
+    app.run(start())
